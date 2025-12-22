@@ -305,6 +305,7 @@ document.querySelectorAll(".video-row").forEach(row => {
 
     row.addEventListener("mouseenter", () => {
         vids.forEach(v => {
+            v.loop = true;
             v.currentTime = 0;
             const p = v.play();
             if (p) p.catch(e => console.warn("play failed:", e));
@@ -312,6 +313,10 @@ document.querySelectorAll(".video-row").forEach(row => {
     });
 
     row.addEventListener("mouseleave", () => {
-        vids.forEach(v => v.pause());
+        vids.forEach(v => {
+            v.pause();
+            v.loop = false;
+            v.currentTime = 0;
+        });
     });
 });
