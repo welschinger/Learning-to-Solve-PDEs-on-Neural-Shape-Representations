@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Learning to Solve PDEs on Neural Shape Representations</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="style.css">
+    <script>
+        window.MathJax = { tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] } };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+
+</head>
+
+<body>
+    <div class="page">
+
+        <!-- HERO CARD -->
+        <header class="hero">
+            <div class="hero-card">
+                <h1>Learning to Solve PDEs on Neural Shape Representations</h1>
+
+                <p class="authors">
+                    <span class="author"><strong>Lilian Welschinger</strong><sup>1</sup></span>
+                    <span class="author">Yilin Liu<sup>1</sup></span>
+                    <span class="author">Zican Wang<sup>1</sup></span>
+                    <span class="author">Niloy Mitra<sup>1,2</sup></span>
+                </p>
+
+                <p class="affiliations">
+                    <sup>1</sup> University College London ·
+                    <sup>2</sup> Adobe
+                </p>
+            </div>
+        </header>
+
+        <!-- ICON LINKS -->
+        <section class="link-strip">
+            <a class="link-card" href="assets/paper.pdf">
+                <div class="link-icon">📄</div>
+                <div class="link-label link-black">Paper</div>
+            </a>
+
+            <a class="link-card" href="assets/supplemental.pdf">
+                <div class="link-icon">📎</div>
+                <div class="link-label link-black">Supplemental</div>
+            </a>
+
+            <a class="link-card" href="code.html">
+                <div class="link-icon">
+                    <img src="assets/github_logo.svg" alt="github logo">
+                </div>
+                <div class="link-label link-black">Code</div>
+            </a>
+
+            <!-- <a class="link-card" href="assets/poster.pdf">
+                <div class="link-icon">📰</div>
+                <div class="link-label link-black">Poster</div>
+            </a> -->
+        </section>
+
+
+        <main>
+
+            <!-- Teasers -->
+            <section class="section">
+                <figure class="paper-teaser">
+                    <img src="assets/Teaser.png" alt="Teaser figure: [short description]">
+                    <figcaption class="teaser-caption">
+                        Figure 1: Our mesh-free, geometry-conditioned learned operator solves surface PDEs (heat
+                        equation in the teaser) <em>directly in the neural domain</em> on multiple modalities, without
+                        mesh
+                        extraction, or per-instance optimization. Trained once on a single exemplar (<em>SPIKE</em>,
+                        top-left),
+                        the learned operator generalizes across unseen geometries, topologies, and input modalities.
+                        See below for heat flow videos and also Poisson solves.
+                    </figcaption>
+                </figure>
+            </section>
+            <!-- ABSTRACT -->
+            <section class="section">
+                <h2>Abstract</h2>
+                <p>
+                    Solving partial differential equations (PDEs) on shapes underpins many shape analysis and
+                    engineering tasks; yet, prevailing PDE solvers operate on polygonal/triangle meshes while modern
+                    3D assets increasingly live as neural representations. This mismatch leaves no suitable method to
+                    solve surface PDEs directly within the neural domain, forcing explicit mesh extraction or
+                    per-instance residual training, preventing end-to-end workflows.
+                </p>
+                <p>
+                    We present a mesh-free formulation that learns a local update operator conditioned on neural
+                    local shape attributes, enabling surface PDEs to be solved directly where the neural data lives.
+                    The operator integrates with prevalent neural surface representations, is trained once on a single
+                    representative shape, and generalizes across shape and topology variations, enabling accurate,
+                    fast inference without explicit meshing or per-instance optimization while preserving
+                    differentiability.
+                </p>
+                <p>
+                    Across analytic benchmarks (heat equation and Poisson solve on a sphere) and real neural
+                    assets across different representations, our method slightly outperforms CPM while remaining
+                    reasonably close to FEM, and, to our knowledge, delivers the first end-to-end pipeline that
+                    solves surface PDEs on both neural and classical surface representations.
+                </p>
+            </section>
+
+            <!-- Method overview -->
+            <section id="method" class="section">
+                <h2>Method Overview</h2>
+                <div class="method-figure">
+                    <figure class="paper-teaser">
+                        <img src="assets/neuralPDE_pipeline.png" alt="Pipeline figure">
+                        <figcaption class="teaser-caption">
+                            <span class="fig-label">Figure 2:</span> <strong>Pipeline overview.</strong>
+                        </figcaption>
+
+                    </figure>
+                </div>
+                <div>
+                    <p>From a surface <span class="math">\( \mathcal{S} \)</span>, we sample points and geometric
+                        features (normals, local features).
+                        Around an <span class="math">\( \varepsilon \)</span>-<em>narrow band</em> around the shape,
+                        we gather Cartesian grids <span class="math">\( \mathcal{B}_{\mathcal{S}} \)</span>
+                        to store an initial field <span class="math">\( U_0 \)</span> extended from surface values and
+                        covered by overlapping, surface-centred patches <span class="math">\( \{ \mathcal{P}_i \}
+                            \)</span>.
+                        Each patch is reoriented to its local frame, yielding
+                        <span class="math">\( \{ \hat{\mathcal{B}}_i, \hat{\mathcal{F}}_i \} \)</span>,
+                        which are processed by our lightweight geometry-conditioned operators <span class="math">\( \{
+                            \mathcal{N}_\Theta \} \)</span> to
+                        produce local updates (see <a href="#fig:3">Figure 3</a>).
+                        The local updates are smoothly aggregated to form the global band update
+                        <span class="math">\( \tilde{U}_{t} \)</span> and advanced with a standard grid PDE time
+                        step to get
+                        <span class="math">\( U_{t+1} \)</span>.
+                        Iterating this loop yields surface PDE solutions directly in the neural domain via
+                        grid-to-grid updates,
+                        <em>without</em> mesh extraction or extend&ndash;restrict shuttling.
+                    </p>
+                </div>
+                <strong>Neural update operator (overview).</strong>
+                <div class="two-column">
+                    <div class="method-figure">
+                        <figure class="paper-teaser">
+                            <img src="assets/NN architecture.jpg" alt="Teaser figure: [short description]">
+                            <figcaption class="teaser-caption">Figure 3: Our network <span class="math">\(
+                                    \mathcal{N}_\Theta \)</span> architecture </figcaption>
+                        </figure>
+                    </div>
+                    <div>
+                        <p>
+                            Given a query location <span class="math">\( q \)</span>, the local band
+                            <span class="math">\( \hat{\mathcal{B}}_i \)</span> expressed in the local frame
+                            <span class="math">\( \mathcal{L}_i \)</span> centered around
+                            <span class="math">\( p_i^c \)</span> for patch
+                            <span class="math">\( \mathcal{P}_i \)</span>, with locally transformed surface features
+                            <span class="math">\( \hat{\mathcal{F}}_i \)</span> (e.g., positions, normals), and current
+                            band values
+                            <span class="math">\( u^i \)</span> at grid sites (time index
+                            <span class="math">\( t \)</span> omitted for brevity; full notation
+                            <span class="math">\( u^i_t \)</span>), our operator predicts an updated function value at
+                            location
+                            <span class="math">\( q \)</span>.
+                            Trainable components include compact MLP blocks
+                            <span class="math">\( \Phi_{\theta_1}, \Phi_{\theta_2}, \Phi_{\theta_3} \)</span>
+                            and a scalar <span class="math">\( \lambda \)</span>.
+                            The full network <span class="math">\( \mathcal{N}_\Theta \)</span> produces the updated
+                            band value at
+                            <span class="math">\( q \)</span>, yielding a single geometry&ndash;conditioned grid-to-grid
+                            step.
+                        </p>
+                    </div>
+                </div>
+            </section>
+            <!-- Results -->
+            <section id="results" class="section">
+                <h2>Results</h2>
+                <p>Our precomputed results for different evaluations in the paper.</p>
+                <!-- clickable cards -->
+                <div class="results-grid">
+                    <div class="result-card is-active" data-target="result-generalization">
+                        <h3>Generalization</h3>
+                        <p>Generalization across shapes</p>
+                    </div>
+                    <div class="result-card" data-target="result-modalities">
+                        <h3>Different neural surfaces</h3>
+                        <p>Tests on different neural representations</p>
+                    </div>
+                    <div class="result-card" data-target="result-boundary">
+                        <h3>Boundary handling</h3>
+                        <p>Dirichlet boundary conditions</p>
+                    </div>
+                </div>
+
+                <!-- content section below the grid” -->
+                <div class="results-display-card">
+                    <div id="result-modalities" class="result-content is-active">
+                        <div class="interactive-header">
+                            <h3>Different neural surface representations</h3>
+                            <p>
+                                Our method operates natively on a wide spectrum of neural and classical surface
+                                representations without requiring meshing, re-meshing, or per-instance optimization—as
+                                long
+                                as local geometric features such as positions and normals can be sampled.
+                                To demonstrate this versatility, we evaluate the solver on neural SDFs, overfitted SDF,
+                                Spherical Neural Surfaces (SNS), Gaussian splatting, point clouds, and triangle meshes.
+                                Across all representations, the solver achieves stable and consistent accuracy despite
+                                large
+                                differences in geometric quality—for example, SNS provides clean differential estimates,
+                                whereas point clouds and GSplats often yield noisy normals.
+                                As shown in Figure 1 and Table 2 of the main paper, the operator adapts robustly to
+                                these
+                                variations: SNS achieves the strongest accuracy, while SDFs, meshes, and point clouds
+                                follow
+                                closely, demonstrating resilience to imperfect or approximate geometry.
+                                Finally, our method remains reasonably close to FEM in accuracy and, to our knowledge,
+                                provides the first end-to-end pipeline capable of solving surface PDEs directly on both
+                                neural and classical surface representations.</p>
+                            <div class="model-toggle-group">
+                                <button class="model-toggle is-active" data-target="model-GS" data-shape="GS">
+                                    Gaussian splatting
+                                </button>
+                                <button class="model-toggle " data-target="model-armadillo" data-shape="armadillo">
+                                    SNS
+                                </button>
+                                <button class="model-toggle " data-target="model-camera" data-shape="camera">
+                                    DeepSDF
+                                </button>
+                                <button class="model-toggle " data-target="model-max" data-shape="max">
+                                    Overfitted SDF
+                                </button>
+                                <button class="model-toggle " data-target="model-helmet" data-shape="helmet">
+                                    Point cloud
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="result-generalization" class="result-content">
+                        <div class="interactive-header">
+                            <h3>Generalization across shapes</h3>
+                            <p>To assess cross-shape generalization, we train our network once on a single shape and
+                                evaluate it on a diverse gallery of unseen and challenging geometries by solving both
+                                heat and Poisson equations.
+                                The test set includes smooth organic shapes, objects with sharp features, CAD models,
+                                and thin structures where the closest-point projection becomes ambiguous (i.e., cp is
+                                not unique).
+                                As shown in Figure 4 of the main article, the method closely matches SFEM reference
+                                solutions across this entire collection, with noticeable deviations only in inherently
+                                ambiguous regions such as sharp edges or thin components. These artifacts are expected
+                                and inherited from the underlying CPM formulation.
+                                Despite these natural limitations, errors remain consistently low and stable across
+                                shapes (Table 3), confirming a key strength of the approach: generalizing from a single
+                                training shape to a wide family of unseen geometries while maintaining reliable
+                                accuracy.Generalization examples: Apple, fastener, holey_human, jared, octopus, Sofa.
+                            </p>
+                            <!-- model toggle buttons -->
+                            <div class="model-toggle-group">
+                                <button class="model-toggle is-active" data-target="model-octopus" data-shape="octopus">
+                                    Octopus
+                                </button>
+                                <button class="model-toggle" data-target="model-apple" data-shape="apple">
+                                    Apple
+                                </button>
+                                <button class="model-toggle" data-target="model-jared" data-shape="jared">
+                                    Jared
+                                </button>
+
+                                <button class="model-toggle" data-target="model-holey" data-shape="holey">
+                                    Holey human
+                                </button>
+                                <button class="model-toggle" data-target="model-sofa" data-shape="sofa">
+                                    Sofa
+                                </button>
+                                <button class="model-toggle" data-target="model-fastener" data-shape="fastener">
+                                    Fastener
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="result-boundary" class="result-content">
+                        <div class="interactive-header">
+                            <h3>Boundary handling</h3>
+                            <p>We also evaluate our method on surfaces with Dirichlet boundary conditions applied on a
+                                cut version of the Max-Planck head (Figure 5 in the main article). We consider two
+                                regimes of increasing difficulty:
+                                a constant boundary condition, and
+                                a more challenging sinusoidal boundary condition.
+                                As in the Closest Point Method, boundary values are enforced directly on band nodes
+                                whose closest-point projections lie on the boundary. Our learned operator naturally
+                                inherits this behavior: in both cases, the solver remains stable, with only a mild
+                                increase in error for the oscillatory boundary condition (see Table 15 in the
+                                supplemental).
+                                These experiments confirm that the method handles Dirichlet boundaries reliably,
+                                leveraging CPM's boundary treatment while still producing accurate solutions on open
+                                surfaces.</p>
+                            <!-- model toggle buttons -->
+                            <div class="model-toggle-group">
+                                <button class="model-toggle is-active" data-target="model-max_sin"
+                                    data-shape="max_boundary_sin">
+                                    Sinusoidal
+                                </button>
+                                <button class="model-toggle" data-target="model-max_0" data-shape="max_boundary_0">
+                                    Homogeneous
+                                </button>
+                            </div>
+                        </div>
+                        <!-- 3D viewer (hidden by default for file://) -->
+                        <!-- <model-viewer id="model-3d" src="assets/max_boundary_2.glb" alt="Colored neural surface"
+                                camera-controls auto-rotate style="width: 100%; height: 400px; background: #ffffff;">
+                            </model-viewer> -->
+                    </div>
+                    <!-- single shared viewer -->
+                    <div class="viewer-shell">
+                        <div class="viewer-header-row">
+                            <div>
+                                <h3 class="viewer-title">Interactive viewer</h3>
+                                <!-- <p class="viewer-subtitle">Rotate, zoom, and view heat flow over time.</p> -->
+                            </div>
+                            <div class="viewer-controls">
+                                <div class="pde-toggle-row">
+                                    <button class="pde-toggle is-active" data-pde="poisson">Poisson</button>
+                                    <button class="pde-toggle" data-pde="heat">Heat</button>
+                                </div>
+                                <!-- global method buttons -->
+                                <div class="method-toggle-row">
+                                    <button class="method-toggle is-active" data-method="ours">Ours</button>
+                                    <button class="method-toggle" data-method="fem">FEM</button>
+                                    <button class="method-toggle" data-method="error">Error</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="position: relative;">
+                            <canvas id="pdeCanvas" style="width: 100%; height: 400px; display: block;"
+                                data-shape="apple"></canvas>
+                            <div id="pdeTimer" class="pde-timer">t = 0.00</div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- Demo -->
+            <!-- <section id="demo" class="section">
+                <h2>Video</h2>
+                <p>Youtube?</p>
+                <div class="video-wrapper">
+                    <iframe src="https://www.youtube.com/embed/xxxxxxxxxx" title="Paper video" frameborder="0"
+                        allowfullscreen>
+                    </iframe>
+                </div>
+            </section> -->
+
+            <section id="videos" class="section">
+                <h2>Videos (hover cursor over to play)</h2>
+                <p>Truncated to 3 seconds</p>
+                <div class="video-grid">
+                    <div class="video-header">
+                        <span>Ours</span>
+                        <span>FEM</span>
+                        <span>Error</span>
+                        <span></span>
+                    </div>
+                    <!-- === ROW 3 === -->
+                    <div class="video-row">
+                        <video class="vid" src="assets/viz/holey_ours_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/holey_fem_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/holey_error_viz_fixed.mp4" type="video/mp4"></video>
+
+                        <img class="colorbar" src="assets/viz/holey_error_colorbar.png">
+                    </div>
+                    <!-- === ROW 4 === -->
+                    <div class="video-row">
+                        <video class="vid" src="assets/viz/jared_ours_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/jared_fem_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/jared_error_viz_fixed.mp4" type="video/mp4"></video>
+
+                        <img class="colorbar" src="assets/viz/jared_error_colorbar.png">
+                    </div>
+                    <!-- === ROW 5 === -->
+                    <div class="video-row">
+                        <video class="vid" src="assets/viz/octopus_ours_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/octopus_fem_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/octopus_error_viz_fixed.mp4" type="video/mp4"></video>
+
+                        <img class="colorbar" src="assets/viz/octopus_error_colorbar.png">
+                    </div>
+                    <!-- === ROW 6 === -->
+                    <div class="video-row">
+                        <video class="vid" src="assets/viz/sofa_ours_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/sofa_ours_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/sofa_error_viz_fixed.mp4" type="video/mp4"></video>
+
+                        <img class="colorbar" src="assets/viz/sofa_error_colorbar.png">
+                    </div>
+
+                    <!-- === ROW 1 === -->
+                    <div class="video-row">
+                        <video class="vid" src="assets/viz/apple_ours_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/apple_fem_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/apple_error_viz_fixed.mp4" type="video/mp4"></video>
+
+                        <img class="colorbar" src="assets/viz/apple_error_colorbar.png">
+                    </div>
+                    <!-- === ROW 1 === -->
+                    <div class="video-row">
+                        <video class="vid" src="assets/viz/fastener_ours_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/fastener_fem_viz_fixed.mp4" type="video/mp4"></video>
+                        <video class="vid" src="assets/viz/fastener_error_viz_fixed.mp4" type="video/mp4"></video>
+
+                        <img class="colorbar" src="assets/viz/fastener_error_colorbar.png">
+                    </div>
+                </div>
+            </section>
+
+            <!-- BibTeX -->
+            <!-- <section id="bibtex" class="section">
+                <h2>BibTeX</h2>
+                <pre class="bibtex-block">
+                </pre>
+            </section> -->
+
+            <!-- Acknowledgements -->
+            <section id="acknowledgements" class="section">
+                <h2>Acknowledgements</h2>
+                <p>xxx
+                </p>
+            </section>
+        </main>
+        <footer class="footer">
+            <p>Contact: <a href="mailto:[your-email]">xxx</a></p>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+    <script type="module" src="js/pde_viewer.js"></script>
+</body>
+
+</html>
