@@ -24,6 +24,7 @@ const GESTURE_HINT_TIMEOUT = 8000; // ms to show hint
 const AUTO_ANIMATION_DURATION = 1500; // ms total animation time before stopping
 
 
+
 // default paths (can be overridden by data-* on the canvas)
 let MESH_URL = "assets/data/octopus_ours_poisson.glb";
 let COLORS_META_URL = null;
