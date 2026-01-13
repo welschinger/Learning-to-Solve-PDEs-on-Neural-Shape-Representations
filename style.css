@@ -587,3 +587,47 @@ a {
   pointer-events: none;
   z-index: 10;
 }
+
+/* Gesture hint overlay */
+.pde-gesture-hint {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+  transform: translate(-50%, -50%);
+  transition: none;
+}
+
+.pde-finger-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  padding: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  animation: pde-finger-pulse 1.5s ease-in-out infinite;
+}
+
+.pde-finger-icon img {
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+}
+
+.pde-finger-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes pde-finger-pulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}

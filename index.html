@@ -251,7 +251,7 @@
                                 Despite these natural limitations, errors remain consistently low and stable across
                                 shapes (Table 3), confirming a key strength of the approach: generalizing from a single
                                 training shape to a wide family of unseen geometries while maintaining reliable
-                                accuracy.Generalization examples: Apple, fastener, holey_human, jared, octopus, Sofa.
+                                accuracy.
                             </p>
                             <!-- model toggle buttons -->
                             <div class="model-toggle-group">
@@ -334,6 +334,11 @@
                             <canvas id="pdeCanvas" style="width: 100%; height: 400px; display: block;"
                                 data-shape="apple"></canvas>
                             <div id="pdeTimer" class="pde-timer">t = 0.00</div>
+                            <div id="pdeGestureHint" class="pde-gesture-hint" style="display: none;">
+                                <div class="pde-finger-icon">
+                                    <img src="assets/cursor-hand-icon.svg" alt="drag hint"/>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -5,6 +5,8 @@ import { GLTFLoader } from './GLTFLoader.js';
 let scene, camera, renderer, controls;
 let mesh = null;
 let timerEl = null;
+let gestureHintEl = null;
+let fingerIconEl = null;
 // Animation data: { T, V, data: Float32Array }
 let anim = null;
 let frameFloat = 0;
@@ -12,6 +14,14 @@ let lastShape = null;
 let savedCameraPos = null;
 let savedTarget = null;
 let savedRotation = null;
+// Gesture hint & auto-animation
+let lastUserInteractionTime = Date.now(); // Initialize to now so it waits initially
+let showingGestureHint = false;
+let baseRotation = { x: 0, y: 0, z: 0 }; // Store base rotation separately
+let animationStartTime = 0; // Track when current animation cycle started
+const GESTURE_HINT_DELAY = 4000; // ms before showing hint
+const GESTURE_HINT_TIMEOUT = 8000; // ms to show hint
+const AUTO_ANIMATION_DURATION = 1500; // ms total animation time before stopping
 
 
 // default paths (can be overridden by data-* on the canvas)
@@ -50,6 +60,10 @@ document.addEventListener("DOMContentLoaded", () => {
 function init() {
     const canvas = document.getElementById("pdeCanvas");
     timerEl = document.getElementById("pdeTimer");
+    gestureHintEl = document.getElementById("pdeGestureHint");
+    fingerIconEl = gestureHintEl?.querySelector(".pde-finger-icon");
+    console.log("[PDE VIEWER] gestureHintEl:", gestureHintEl);
+    console.log("[PDE VIEWER] fingerIconEl:", fingerIconEl);
     if (!canvas) {
         console.warn("[PDE VIEWER] No #pdeCanvas found; viewer disabled.");
         return;
@@ -99,8 +113,56 @@ function init() {
 
     controls = new OrbitControls(camera, renderer.domElement);
 
+    // Track user interaction to show/hide gesture hint
+    renderer.domElement.addEventListener("pointerdown", recordUserInteraction);
+    renderer.domElement.addEventListener("wheel", recordUserInteraction);
+    renderer.domElement.addEventListener("touchstart", recordUserInteraction);
+
     window.addEventListener("resize", resizeRenderer);
     animate();
+}
+
+function recordUserInteraction() {
+    lastUserInteractionTime = Date.now();
+    animationStartTime = 0; // Reset animation cycle
+    if (showingGestureHint) {
+        hideGestureHint();
+    }
+}
+
+function showGestureHint() {
+    if (gestureHintEl && !showingGestureHint) {
+        console.log("[PDE VIEWER] Showing gesture hint");
+        gestureHintEl.style.display = "block";
+        showingGestureHint = true;
+    }
+}
+
+function hideGestureHint() {
+    if (gestureHintEl && showingGestureHint) {
+        console.log("[PDE VIEWER] Hiding gesture hint");
+        gestureHintEl.style.display = "none";
+        showingGestureHint = false;
+    }
+}
+
+function updateGestureHint() {
+    const timeSinceInteraction = Date.now() - lastUserInteractionTime;
+
+    // Show/hide hint based on animation cycle
+    if (timeSinceInteraction > GESTURE_HINT_DELAY && animationStartTime > 0) {
+        const elapsedInCycle = (Date.now() - animationStartTime) % (AUTO_ANIMATION_DURATION + GESTURE_HINT_DELAY);
+        
+        // Show during animation, hide when animation stops
+        if (elapsedInCycle < AUTO_ANIMATION_DURATION && !showingGestureHint) {
+            showGestureHint();
+        } else if (elapsedInCycle >= AUTO_ANIMATION_DURATION && showingGestureHint) {
+            hideGestureHint();
+        }
+    } else if (showingGestureHint && timeSinceInteraction <= GESTURE_HINT_DELAY) {
+        // Hide if user interacted
+        hideGestureHint();
+    }
 }
 
 function resizeRenderer() {
@@ -238,6 +300,14 @@ function handleGltfLoaded(gltf) {
         console.log("[PDE VIEWER] Applying preset rotation:", preset);
         mesh.rotation.set(preset.x, preset.y, preset.z);
     }
+    
+    // Store the base rotation for auto-animation
+    baseRotation = {
+        x: mesh.rotation.x,
+        y: mesh.rotation.y,
+        z: mesh.rotation.z
+    };
+    console.log("[PDE VIEWER] Stored base rotation:", baseRotation);
     console.log("[PDE VIEWER] Mesh added to scene. Vertex count:",
         mesh.geometry.attributes.position.count);
 
@@ -478,6 +548,75 @@ function animate() {
             timerEl.style.display = "none";
         }
     }
+
+    // Update gesture hint visibility
+    updateGestureHint();
+
+    // Auto-animate when no user interaction - repeating cycle
+    const timeSinceInteraction = Date.now() - lastUserInteractionTime;
+    if (timeSinceInteraction > GESTURE_HINT_DELAY && mesh && controls) {
+        // Initialize animation cycle on first frame
+        if (animationStartTime === 0) {
+            animationStartTime = Date.now();
+        }
+        
+        // Calculate elapsed time within the animation cycle
+        const elapsedInCycle = (Date.now() - animationStartTime) % (AUTO_ANIMATION_DURATION + GESTURE_HINT_DELAY);
+        
+        // Only animate during the animation duration, then wait before repeating
+        if (elapsedInCycle < AUTO_ANIMATION_DURATION) {
+            // Smoothly rotate camera around the Y-axis using OrbitControls' theta
+            const progress = elapsedInCycle / AUTO_ANIMATION_DURATION;
+            const angleSignal = Math.sin(progress * Math.PI * 4)*0.2; // Shared signal for camera + icon
+            const angle = angleSignal * 0.4; // Full sine wave over animation duration
+            
+            // Rotate using OrbitControls' autoRotate-like approach
+            // Store base theta on first animation
+            if (!controls._baseTheta) {
+                controls._baseTheta = controls.getAzimuthalAngle();
+            }
+            
+            // Apply rotation offset to theta while maintaining phi (vertical angle)
+            const newTheta = controls._baseTheta + angle;
+            const radius = controls.getDistance();
+            const phi = controls.getPolarAngle();
+            
+            // Update camera position using spherical coordinates
+            const centerPos = controls.target;
+            camera.position.x = centerPos.x + radius * Math.sin(phi) * Math.sin(newTheta);
+            camera.position.y = centerPos.y + radius * Math.cos(phi);
+            camera.position.z = centerPos.z + radius * Math.sin(phi) * Math.cos(newTheta);
+            camera.lookAt(centerPos);
+            
+            // Show and position finger icon moving left-right in sync with camera
+            if (gestureHintEl && renderer) {
+                const canvas = renderer.domElement;
+                const canvasRect = canvas.getBoundingClientRect();
+                const centerX = canvasRect.width / 2;
+                const centerY = canvasRect.height / 2;
+                const dragDistance = 80;
+                const pointerX = centerX - angleSignal * dragDistance; // Keep icon in phase with camera
+                
+                gestureHintEl.style.left = pointerX + 'px';
+                gestureHintEl.style.top = centerY + 'px';
+            }
+        }
+    } else {
+        // Reset animation when user interacts
+        animationStartTime = 0;
+        if (controls) {
+            controls._baseTheta = undefined; // Reset stored theta
+        }
+        
+        // Reset finger position when not animating
+        if (gestureHintEl && renderer) {
+            const canvas = renderer.domElement;
+            const canvasRect = canvas.getBoundingClientRect();
+            gestureHintEl.style.left = (canvasRect.width / 2) + 'px';
+            gestureHintEl.style.top = (canvasRect.height / 2) + 'px';
+        }
+    }
+
     resizeRenderer();
     if (controls) controls.update();
     if (renderer && scene && camera) {
